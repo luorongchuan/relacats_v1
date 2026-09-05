@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 # Generate certified numeric-metamorphic teacher pools for GSM8K and SVAMP.
 # Three base models run serially; within each model, two question shards run in
-# parallel on physical GPUs 1 and 2.  Outputs are written directly into the
+# parallel on physical GPUs 1 and 2. Outputs are written directly into the
 # existing per-model generated_data roots, touching only gsm8k/ and svamp/.
 # The seven MCQ dataset directories are never modified.
 
@@ -82,6 +82,7 @@ log() {
   echo "[$(date '+%F %T %z')] $*"
 }
 
+LAST_PID=""
 run_worker() {
   local gpu="$1"
   local shard="$2"
@@ -107,7 +108,7 @@ run_worker() {
       --num-shards 2 \
       --shard-index "${shard}" \
       >"${log_file}" 2>&1 &
-  echo $!
+  LAST_PID=$!
 }
 
 cleanup_pids=()
@@ -132,7 +133,7 @@ log "Numeric metamorphic generation starting"
 log "GPUs=${GPU_FIRST},${GPU_SECOND}"
 log "datasets=${DATASETS}"
 log "output_base=${OUTPUT_BASE}"
-log "identity-only archive is expected to remain separate and is not touched"
+log "identity-only archive is separate and is not touched"
 
 for index in "${!MODEL_TAGS[@]}"; do
   tag="${MODEL_TAGS[$index]}"
@@ -145,8 +146,10 @@ for index in "${!MODEL_TAGS[@]}"; do
   log "model=${model_path}"
   log "output=${output_root}"
 
-  pid0="$(run_worker "${GPU_FIRST}" 0 "${model_path}" "${output_root}" "${model_log_root}/shard0_gpu${GPU_FIRST}.log")"
-  pid1="$(run_worker "${GPU_SECOND}" 1 "${model_path}" "${output_root}" "${model_log_root}/shard1_gpu${GPU_SECOND}.log")"
+  run_worker "${GPU_FIRST}" 0 "${model_path}" "${output_root}" "${model_log_root}/shard0_gpu${GPU_FIRST}.log"
+  pid0="${LAST_PID}"
+  run_worker "${GPU_SECOND}" 1 "${model_path}" "${output_root}" "${model_log_root}/shard1_gpu${GPU_SECOND}.log"
+  pid1="${LAST_PID}"
   cleanup_pids=("${pid0}" "${pid1}")
 
   set +e
@@ -161,7 +164,6 @@ for index in "${!MODEL_TAGS[@]}"; do
     exit 1
   fi
 
-  # Lightweight postcondition: both dataset directories must now exist.
   for dataset in ${DATASETS}; do
     qdir="${output_root}/${dataset}/questions"
     [[ -d "${qdir}" ]] || fail "missing output directory after ${tag}: ${qdir}"
