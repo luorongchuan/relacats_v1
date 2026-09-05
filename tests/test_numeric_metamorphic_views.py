@@ -29,7 +29,6 @@ def test_four_views_on_typical_gsm8k_question():
     assert all(v.verify() for v in views)
     assert all(v.answer_mapping == "identity" for v in views)
     assert "forty-eight" in views[2].transformed_question
-    # There is only one eligible integer, so g3 may safely use the same source span.
     assert "(47 + 1)" in views[3].transformed_question
 
 
@@ -42,12 +41,22 @@ def test_numeric_edits_are_exactly_reversible():
             assert view.edit.reverse(view.transformed_question) == question
 
 
-def test_unsafe_numeric_forms_are_not_modified():
+def test_unsafe_decimal_currency_and_percentage_are_not_modified():
     question = "A price changes from $4.50 to $5.00, a 10% increase. What is the difference?"
     views = generate_numeric_metamorphic_views(question)
-    # Identity and layout are always available. Currency/decimal/percentage
-    # literals are intentionally excluded from the automatic numeric edits.
     assert [v.relation_subtype for v in views] == ["identity", "layout_wrapper"]
+    assert all(v.verify() for v in views)
+
+
+def test_integer_currency_is_rendered_naturally():
+    question = "Edward spent $ 6 on a book. How much did he spend?"
+    views = generate_numeric_metamorphic_views(question)
+    assert len(views) == 4
+    word_view = next(v for v in views if v.relation_subtype == "number_representation")
+    expr_view = next(v for v in views if v.relation_subtype == "equivalent_quantity")
+    assert "six dollars" in word_view.transformed_question
+    assert "$ six" not in word_view.transformed_question
+    assert "(5 + 1) dollars" in expr_view.transformed_question
     assert all(v.verify() for v in views)
 
 
