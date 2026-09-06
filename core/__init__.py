@@ -13,10 +13,13 @@ from .canonicalization import (
 )
 from .numeric_metamorphic_views import (
     CertifiedEdit,
+    NUMERIC_RELATION_PROFILES,
     NumericMetamorphicView,
     NumericRelationError,
+    generate_entity_renaming_views,
     generate_numeric_metamorphic_views,
     integer_to_english,
+    recognized_person_names,
     relation_coverage,
 )
 from .relational_views import (
@@ -52,6 +55,7 @@ __all__ = [
     "InvalidAnswerError",
     "InvalidConfidenceError",
     "InvalidPermutationError",
+    "NUMERIC_RELATION_PROFILES",
     "NumericMetamorphicView",
     "NumericRelationError",
     "OptionPermutation",
@@ -68,6 +72,7 @@ __all__ = [
     "canonicalize_answer",
     "canonicalize_answer_value",
     "compute_relssc",
+    "generate_entity_renaming_views",
     "generate_identity_views",
     "generate_numeric_metamorphic_views",
     "generate_option_permutation_views",
@@ -75,6 +80,7 @@ __all__ = [
     "normalize_answer",
     "normalize_numeric_answer",
     "normalize_option_answer",
+    "recognized_person_names",
     "relation_coverage",
     "render_multiple_choice_question",
     "validate_sampling_budget",
