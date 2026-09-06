@@ -7,6 +7,11 @@ set -Eeuo pipefail
 #
 # Three models run serially. Within one model, two question shards run in
 # parallel on physical GPUs 1 and 2 (or GPU_FIRST/GPU_SECOND overrides).
+#
+# IMPORTANT: workers must be launched directly by this shell.  Do not capture
+# the output of run_worker with command substitution: command substitution runs
+# the function in a subshell, so the returned PID is not a child of this shell
+# and `wait` fails with "pid ... is not a child of this shell".
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
@@ -83,6 +88,10 @@ log() {
   echo "[$(date '+%F %T %z')] $*"
 }
 
+# PID of the most recently launched worker.  The caller invokes run_worker in
+# the current shell and then copies this variable.  This preserves the parent-
+# child relationship required by bash `wait`.
+RUN_WORKER_PID=""
 run_worker() {
   local gpu="$1"
   local shard="$2"
@@ -108,7 +117,7 @@ run_worker() {
       --num-shards 2 \
       --shard-index "${shard}" \
       >"${log_file}" 2>&1 &
-  echo $!
+  RUN_WORKER_PID=$!
 }
 
 cleanup_pids=()
@@ -117,10 +126,12 @@ cleanup() {
   trap - EXIT INT TERM
   if (( status != 0 )); then
     for pid in "${cleanup_pids[@]:-}"; do
+      [[ -n "${pid}" ]] || continue
       kill -TERM -- "-${pid}" 2>/dev/null || kill -TERM "${pid}" 2>/dev/null || true
     done
   fi
   for pid in "${cleanup_pids[@]:-}"; do
+    [[ -n "${pid}" ]] || continue
     wait "${pid}" 2>/dev/null || true
   done
   exit "${status}"
@@ -147,8 +158,10 @@ for index in "${!MODEL_TAGS[@]}"; do
   log "model=${model_path}"
   log "output=${output_root}"
 
-  pid0="$(run_worker "${GPU_FIRST}" 0 "${model_path}" "${output_root}" "${model_log_root}/shard0_gpu${GPU_FIRST}.log")"
-  pid1="$(run_worker "${GPU_SECOND}" 1 "${model_path}" "${output_root}" "${model_log_root}/shard1_gpu${GPU_SECOND}.log")"
+  run_worker "${GPU_FIRST}" 0 "${model_path}" "${output_root}" "${model_log_root}/shard0_gpu${GPU_FIRST}.log"
+  pid0="${RUN_WORKER_PID}"
+  run_worker "${GPU_SECOND}" 1 "${model_path}" "${output_root}" "${model_log_root}/shard1_gpu${GPU_SECOND}.log"
+  pid1="${RUN_WORKER_PID}"
   cleanup_pids=("${pid0}" "${pid1}")
 
   set +e
